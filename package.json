@@ -1,6 +1,6 @@
 {
   "name": "node-signalr",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A signalR client for node.js.",
   "main": "index.js",
   "keywords": [

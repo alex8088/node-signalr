@@ -18,7 +18,7 @@ const signalr = require('node-signalr')
 let client = new signalr.client('http://localhost:8080/signalr', ['testHub'])
 ```
 
-### Configure signalR client
+### Configure client
 
 ```js
 // custom headers
@@ -34,7 +34,7 @@ client.reconnectDelayTime = 2000 // 2's, default 5000
 client.requestTimeout = 2000 // 2's, default 5000
 ```
 
-### Bind client event
+### Binding client events
 
 ```js
 client.on('connected', () => {
@@ -51,7 +51,7 @@ client.on('error', (code, ex) => {
 })
 ```
 
-### Bind hub event
+### Binding hub method
 
 - Bind callback for receive message
   
@@ -75,6 +75,18 @@ client.connection.hub.call('testHub', 'send', message).then((result) => {
 
 ```js
 client.connection.hub.invoke('testHub', 'send', message)
+```
+
+### Start client
+
+```js
+client.start()
+```
+
+### End client
+
+```js
+client.end()
 ```
 
 ## Powered By
