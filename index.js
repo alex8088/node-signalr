@@ -268,6 +268,7 @@ class signalrClient {
 
   _error(code, ex = null) {
     this.emit('error', code, ex)
+    if (this.connection.state === connectionState.reconnecting) return
     if (code === errorCode.negotiateError || code === errorCode.connectError) {
       this._reconnect(true)
     }
