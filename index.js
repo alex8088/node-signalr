@@ -80,16 +80,14 @@ class signalrClient {
           }
         }
       })
-      if (this.connection.state !== connectionState.reconnecting) {
-        this._start().then(() => {
-          this.emit('connected')
-        }).catch((error) => {
-          connection.close()
-          this._error(error.code, error.message)
-        })
-      } else {
+      this._start().then(() => {
         this.emit('connected')
-      }
+        this.connection.state = connectionState.connected
+      }).catch((error) => {
+        this.connection.state = connectionState.disconnected
+        connection.close()
+        this._error(error.code, error.message)
+      })
       this.connection.state = connectionState.connected
     })
     client.on('connectFailed', (error) => {
@@ -187,7 +185,7 @@ class signalrClient {
   }
 
   _reconnect(restart = false) {
-    if (this._reconnectTimer) return
+    if (this._reconnectTimer || this.connection.state === connectionState.reconnecting) return
     this._reconnectTimer = setTimeout(() => {
       if (!this._end) {
         ++this._reconnectCount
@@ -268,7 +266,6 @@ class signalrClient {
 
   _error(code, ex = null) {
     this.emit('error', code, ex)
-    if (this.connection.state === connectionState.reconnecting) return
     if (code === errorCode.negotiateError || code === errorCode.connectError) {
       this._reconnect(true)
     }
@@ -311,6 +308,7 @@ class signalrClient {
       }
       this._connect()
     }).catch((error) => {
+      this.connection.state = connectionState.disconnected
       this._error(error.code, error.message)
     })
   }
