@@ -23,12 +23,11 @@ class signalrClient {
     this.headers = {}
     this.reconnectDelayTime = 5000
     this.requestTimeout = 5000
-    this.keepaliveInterval = 5000
-    this.keepalive = true
     this.callTimeout = 5000
     this.connection = {
       state: connectionState.disconnected,
-      hub: new hub(this)
+      hub: new hub(this),
+      lastMessageAt: new Date().getTime()
     }
     this._hubNames = hubs
     this._websocket = {
@@ -37,12 +36,17 @@ class signalrClient {
       invocationId: 0
     }
     this._bound = false
+    this._keepAliveTimeout = 5000
+    this._keepAlive = true
+    this._beatInterval = 5000
+    this._beatTimer = null
     this._reconnectCount = 0
     this._reconnectTimer = null
   }
 
   _bind() {
-    let client = this._websocket.client = new websocketClient({ keepaliveInterval: this.keepaliveInterval, keepalive: this.keepalive })
+    // { keepaliveInterval: this.keepAliveInterval, keepalive: this.keepAlive }
+    let client = this._websocket.client = new websocketClient()
     client.on('connect', (connection) => {
       this._websocket.connection = connection
       this._websocket.invocationId = 0
@@ -61,6 +65,7 @@ class signalrClient {
         }
       })
       connection.on('message', (message) => {
+        this._markLastMessage()
         if (message.type === 'utf8' && message.utf8Data != '{}' && !this._end) {
           let data = JSON.parse(message.utf8Data)
           if (data.M) {
@@ -83,12 +88,13 @@ class signalrClient {
       this._start().then(() => {
         this.emit('connected')
         this.connection.state = connectionState.connected
+        this._markLastMessage()
+        if (this._keepAlive) this._beat()
       }).catch((error) => {
         this.connection.state = connectionState.disconnected
-        connection.close()
+        // connection.close()
         this._error(error.code, error.message)
       })
-      this.connection.state = connectionState.connected
     })
     client.on('connectFailed', (error) => {
       this.connection.state = connectionState.disconnected
@@ -174,7 +180,7 @@ class signalrClient {
   }
 
   _connect() {
-    let query = querystring.stringify( {
+    let query = querystring.stringify({
       clientProtocol: 1.5,
       transport: "webSockets",
       connectionToken: this.connection.token,
@@ -186,6 +192,8 @@ class signalrClient {
 
   _reconnect(restart = false) {
     if (this._reconnectTimer || this.connection.state === connectionState.reconnecting) return
+    if (this._websocket.connection) this._websocket.connection.close()
+    if (this._beatInterval) clearTimeout(this._beatInterval)
     this._reconnectTimer = setTimeout(() => {
       if (!this._end) {
         ++this._reconnectCount
@@ -195,6 +203,21 @@ class signalrClient {
         this._reconnectTimer = null
       }
     }, this.reconnectDelayTime || 5000)
+  }
+
+  _beat() {
+    let timeElapsed = new Date().getTime() - this.connection.lastMessageAt
+    if (timeElapsed > this._keepAliveTimeout) {
+      this._error(errorCode.connectLost)
+    } else {
+      this._beatTimer = setTimeout(() => {
+        this._beat()
+      }, this._beatInterval)
+    }
+  }
+
+  _markLastMessage() {
+    this.connection.lastMessageAt = new Date().getTime()
   }
 
   _start() {
@@ -226,7 +249,7 @@ class signalrClient {
             return reject({ code: errorCode.startError, message: res.statusCode })
           }
         })
-        res.on('error', (e) => { 
+        res.on('error', (e) => {
           return reject({ code: errorCode.startError, message: e })
         })
       }).on('error', (e) => {
@@ -306,6 +329,13 @@ class signalrClient {
         id: negotiateProtocol.ConnectionId,
         token: negotiateProtocol.ConnectionToken
       }
+      if (negotiateProtocol.KeepAliveTimeout) {
+        this._keepAlive = true
+        this._keepAliveTimeout = negotiateProtocol.KeepAliveTimeout * 1000
+        this._beatTimer = this._keepAliveTimeout / 9
+      } else {
+        this._keepAlive = false
+      }
       this._connect()
     }).catch((error) => {
       this.connection.state = connectionState.disconnected
@@ -315,6 +345,7 @@ class signalrClient {
 
   end() {
     this._end = true
+    if (this._beatInterval) clearTimeout(this._beatInterval)
     if (this._websocket.connection) this._websocket.connection.close()
   }
 }
