@@ -191,7 +191,7 @@ class signalrClient {
   }
 
   _reconnect(restart = false) {
-    if (this._reconnectTimer || this.connection.state === connectionState.reconnecting) return
+    if (this._end || this._reconnectTimer || this.connection.state === connectionState.reconnecting) return
     if (this._websocket.connection) this._websocket.connection.close()
     if (this._beatInterval) clearTimeout(this._beatInterval)
     this._reconnectTimer = setTimeout(() => {
@@ -263,7 +263,7 @@ class signalrClient {
     return new Promise((resolve, reject) => {
       let query = querystring.stringify({
         clientProtocol: 1.5,
-        transport: "serverSentEvents",
+        transport: "webSockets",
         connectionToken: this.connection.token,
         connectionData: JSON.stringify(this._hubNames)
       })
@@ -345,7 +345,8 @@ class signalrClient {
 
   end() {
     this._end = true
-    if (this._beatInterval) clearTimeout(this._beatInterval)
+    if ( this._reconnectTimer) clearTimeout(this._reconnectTimer)
+    if (this._beatTimer) clearTimeout(this._beatTimer)
     if (this._websocket.connection) this._websocket.connection.close()
   }
 }
