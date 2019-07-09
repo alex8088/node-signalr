@@ -332,7 +332,7 @@ class signalrClient {
       if (negotiateProtocol.KeepAliveTimeout) {
         this._keepAlive = true
         this._keepAliveTimeout = negotiateProtocol.KeepAliveTimeout * 1000
-        this._beatTimer = this._keepAliveTimeout / 9
+        this._beatInterval = this._keepAliveTimeout / 4
       } else {
         this._keepAlive = false
       }
