@@ -61,7 +61,9 @@ class signalrClient {
         this._websocket.connection = null
         if (this._end) {
           this.emit('disconnected', 'end')
-          this._abort()
+          this._abort().catch((e) => {
+            console.log(e.code)
+          })
         }
       })
       connection.on('message', (message) => {
@@ -345,7 +347,7 @@ class signalrClient {
 
   end() {
     this._end = true
-    if ( this._reconnectTimer) clearTimeout(this._reconnectTimer)
+    if (this._reconnectTimer) clearTimeout(this._reconnectTimer)
     if (this._beatTimer) clearTimeout(this._beatTimer)
     if (this._websocket.connection) this._websocket.connection.close()
   }
