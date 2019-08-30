@@ -42,12 +42,14 @@ class signalrClient {
     this._beatTimer = null
     this._reconnectCount = 0
     this._reconnectTimer = null
+    this._connectTimer = null
   }
 
   _bind() {
     // { keepaliveInterval: this.keepAliveInterval, keepalive: this.keepAlive }
     let client = this._websocket.client = new websocketClient()
     client.on('connect', (connection) => {
+      if (this._connectTimer) clearTimeout(this._connectTimer)
       this._websocket.connection = connection
       this._websocket.invocationId = 0
       this._reconnectCount = 0
@@ -128,9 +130,23 @@ class signalrClient {
         })
       } else {
         this._error(errorCode.connectLost)
+        this._resendMessage(payload)
       }
     } else {
       this._error(errorCode.connectError)
+      this._resendMessage(payload)
+    }
+  }
+
+  _resendMessage(payload) {
+    if (this.callTimeout > this.reconnectDelayTime) {
+      setTimeout(() => {
+        if (this._websocket.connection && this._websocket.connection.connected) {
+          this._websocket.connection.send(payload, (err) => {
+            if (err) console.log(err)
+          })
+        }
+      }, this.reconnectDelayTime)
     }
   }
 
@@ -190,12 +206,15 @@ class signalrClient {
       tid: 10
     })
     this._websocket.client.connect(`${this.url}/connect?${query}`, null, null, this.headers)
+    this._connectTimer = setTimeout(() => {
+      if (!this._websocket.connection) this._websocket.client.abort()
+    }, this.requestTimeout || 5000)
   }
 
   _reconnect(restart = false) {
     if (this._end || this._reconnectTimer || this.connection.state === connectionState.reconnecting) return
     if (this._websocket.connection) this._websocket.connection.close()
-    if (this._beatInterval) clearTimeout(this._beatInterval)
+    if (this._beatTimer) clearTimeout(this._beatTimer)
     this._reconnectTimer = setTimeout(() => {
       if (!this._end) {
         ++this._reconnectCount
@@ -347,8 +366,9 @@ class signalrClient {
 
   end() {
     this._end = true
-    if (this._reconnectTimer) clearTimeout(this._reconnectTimer)
     if (this._beatTimer) clearTimeout(this._beatTimer)
+    if (this._reconnectTimer) clearTimeout(this._reconnectTimer)
+    if (this._connectTimer) clearTimeout(this._connectTimer)
     if (this._websocket.connection) this._websocket.connection.close()
   }
 }
