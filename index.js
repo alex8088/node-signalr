@@ -216,7 +216,7 @@ class signalrClient {
     if (this._websocket.connection) this._websocket.connection.close()
     if (this._beatTimer) clearTimeout(this._beatTimer)
     this._reconnectTimer = setTimeout(() => {
-      if (!this._end) {
+      if (!this._end && this.connection.state !== connectionState.connected) {
         ++this._reconnectCount
         this.connection.state = connectionState.reconnecting
         this.emit('reconnecting', this._reconnectCount)
