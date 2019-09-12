@@ -129,6 +129,7 @@ class signalrClient {
           if (err) console.log(err)
         })
       } else {
+        this.connection.state = connectionState.disconnected
         this._error(errorCode.connectLost)
         this._resendMessage(payload)
       }
@@ -229,6 +230,7 @@ class signalrClient {
   _beat() {
     let timeElapsed = new Date().getTime() - this.connection.lastMessageAt
     if (timeElapsed > this._keepAliveTimeout) {
+      this.connection.state = connectionState.disconnected
       this._error(errorCode.connectLost)
     } else {
       this._beatTimer = setTimeout(() => {
