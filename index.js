@@ -4,7 +4,7 @@ const querystring = require('querystring')
 const http = require('http')
 const https = require('https')
 
-const websocketClient = require('websocket').client
+const websocketClient = require('ws')
 
 const util = require('util')
 const events = require('events')
@@ -23,96 +23,45 @@ class signalrClient {
     this.headers = {}
     this.reconnectDelayTime = 5000
     this.requestTimeout = 5000
-    this.callTimeout = 5000
+    this.callTimeout = 5000  
     this.connection = {
       state: connectionState.disconnected,
       hub: new hub(this),
       lastMessageAt: new Date().getTime()
     }
-    this._hubNames = hubs
-    this._websocket = {
-      client: null,
-      connection: null,
-      invocationId: 0
-    }
     this._bound = false
+    this._websocket = undefined
+    this._hubNames = hubs
+    this._invocationId = 0
+    this._callTimeout = 0
     this._keepAliveTimeout = 5000
     this._keepAlive = true
     this._beatInterval = 5000
     this._beatTimer = null
     this._reconnectCount = 0
     this._reconnectTimer = null
-    this._connectTimer = null
   }
 
-  _bind() {
-    // { keepaliveInterval: this.keepAliveInterval, keepalive: this.keepAlive }
-    let client = this._websocket.client = new websocketClient()
-    client.on('connect', (connection) => {
-      if (this._connectTimer) clearTimeout(this._connectTimer)
-      this._websocket.connection = connection
-      this._websocket.invocationId = 0
-      this._reconnectCount = 0
-      connection.on('error', (error) => {
-        this.connection.state = connectionState.disconnected
-        this.emit('disconnected', 'error')
-        this._reconnect()
-      });
-      connection.on('close', () => {
-        this.connection.state = connectionState.disconnected
-        this._websocket.connection = null
-        if (this._end) {
-          this.emit('disconnected', 'end')
-          this._abort().catch((e) => {
-            console.log(e.code)
-          })
-        }
-      })
-      connection.on('message', (message) => {
-        this._markLastMessage()
-        if (message.type === 'utf8' && message.utf8Data != '{}' && !this._end) {
-          let data = JSON.parse(message.utf8Data)
-          if (data.M) {
-            data.M.forEach((message) => {
-              let hubName = message.H.toLowerCase()
-              let handler = this.connection.hub.handlers[hubName]
-              if (handler) {
-                let methodName = message.M.toLowerCase()
-                let method = handler[methodName]
-                if (method) {
-                  method.apply(this, message.A)
-                }
-              }
-            })
-          } else if (data.I) {
-            this.connection.hub._handleCallback(+data.I, data.E, data.R)
+  _receiveMessage(message) {
+    this._markLastMessage()
+    if (message.type === 'message' && message.data != '{}') {
+      let data = JSON.parse(message.data)
+      if (data.M) {
+        data.M.forEach((message) => {
+          let hubName = message.H.toLowerCase()
+          let handler = this.connection.hub.handlers[hubName]
+          if (handler) {
+            let methodName = message.M.toLowerCase()
+            let method = handler[methodName]
+            if (method) {
+              method.apply(this, message.A)
+            }
           }
-        }
-      })
-      this._start().then(() => {
-        this.emit('connected')
-        this.connection.state = connectionState.connected
-        this._markLastMessage()
-        if (this._keepAlive) this._beat()
-      }).catch((error) => {
-        this.connection.state = connectionState.disconnected
-        // connection.close()
-        this._error(error.code, error.message)
-      })
-    })
-    client.on('connectFailed', (error) => {
-      this.connection.state = connectionState.disconnected
-      this.emit('disconnected', 'failed')
-      this._reconnect()
-    })
-    client.on('httpResponse', (response) => {
-      this.connection.state = connectionState.disconnected
-      if (response && response.statusCode === 401) {
-        this._error(errorCode.unauthorized)
-      } else {
-        this._error(errorCode.connectError)
+        })
+      } else if (data.I) {
+        this.connection.hub._handleCallback(+data.I, data.E, data.R)
       }
-    })
+    }
   }
 
   _sendMessage(hub, method, args) {
@@ -120,34 +69,13 @@ class signalrClient {
       H: hub,
       M: method,
       A: args,
-      I: this._websocket.invocationId
+      I: this._invocationId
     })
-    ++this._websocket.invocationId
-    if (this._websocket.connection) {
-      if (this._websocket.connection.connected) {
-        this._websocket.connection.send(payload, (err) => {
-          if (err) console.log(err)
-        })
-      } else {
-        this.connection.state = connectionState.disconnected
-        this._error(errorCode.connectLost)
-        this._resendMessage(payload)
-      }
-    } else {
-      this._error(errorCode.connectError)
-      this._resendMessage(payload)
-    }
-  }
-
-  _resendMessage(payload) {
-    if (this.callTimeout > this.reconnectDelayTime) {
-      setTimeout(() => {
-        if (this._websocket.connection && this._websocket.connection.connected) {
-          this._websocket.connection.send(payload, (err) => {
-            if (err) console.log(err)
-          })
-        }
-      }, this.reconnectDelayTime)
+    ++this._invocationId
+    if (this._websocket && this._websocket.readyState === this._websocket.OPEN) {
+      this._websocket.send(payload, (err) => {
+        if (err) console.log(err)
+      })
     }
   }
 
@@ -159,14 +87,8 @@ class signalrClient {
       })
       let negotiateRequestOptions = url.parse(`${this.url}/negotiate?${query}`, true)
       negotiateRequestOptions.headers = this.headers
-      if (negotiateRequestOptions.protocol === 'wss:') negotiateRequestOptions.protocol = 'https:'
-      let timeoutTimer, req
-      timeoutTimer = setTimeout(() => {
-        req.abort()
-        reject({ code: errorCode.negotiateError, message: 'ETIMEDOUT' })
-      }, this.requestTimeout || 5000)
-      req = this.request.get(negotiateRequestOptions, (res) => {
-        clearTimeout(timeoutTimer)
+      negotiateRequestOptions.timeout = this.requestTimeout || 5000
+      let req = this.request.get(negotiateRequestOptions, (res) => {
         let data = ''
         res.on('data', (chunk) => {
           data += chunk
@@ -191,14 +113,21 @@ class signalrClient {
         res.on('error', (e) => {
           return reject({ code: errorCode.negotiateError, message: e })
         })
-      }).on('error', (e) => {
-        clearTimeout(timeoutTimer)
+      })
+      req.on('error', (e) => {
+        if (req.aborted) return
+        req = null
         return reject({ code: errorCode.negotiateError, message: e })
+      })
+      req.on('timeout', () => {
+        req.abort()
+        reject({ code: errorCode.negotiateError, message: 'ETIMEDOUT' })
       })
     })
   }
 
   _connect() {
+    let url = this.url.replace(/^http/, "ws")
     let query = querystring.stringify({
       clientProtocol: 1.5,
       transport: "webSockets",
@@ -206,25 +135,67 @@ class signalrClient {
       connectionData: JSON.stringify(this._hubNames),
       tid: 10
     })
-    this._websocket.client.connect(`${this.url}/connect?${query}`, null, null, this.headers)
-    this._connectTimer = setTimeout(() => {
-      if (!this._websocket.connection) this._websocket.client.abort()
-    }, this.requestTimeout || 5000)
+    let ws = new websocketClient(`${url}/connect?${query}`, {
+      handshakeTimeout: this.requestTimeout,
+      encoding: 'utf8',
+      headers: this.headers
+    })
+    ws.onopen = (event) => {
+      this._websocket = ws
+      this._invocationId = 0
+      this._reconnectCount = 0
+      this._callTimeout = 0
+      this._start().then(() => {
+        this.emit('connected')
+        this.connection.state = connectionState.connected
+        this._markLastMessage()
+        if (this._keepAlive) this._beat()
+      }).catch((error) => {
+        this.connection.state = connectionState.disconnected
+        this._error(error.code, error.message)
+      })
+    }
+    ws.onerror = (event) => {
+      this._error(errorCode.socketError, event.error)
+    }
+    ws.onmessage = (message) => {
+      this._receiveMessage(message)
+    }
+    ws.onclose = (event) => {
+      this._callTimeout = 1000
+      this.connection.state = connectionState.disconnected
+      this.emit('disconnected', 'failed')
+      this._reconnect()
+    }
+    ws.on('unexpected-response', (request, response) => {
+      this.connection.state = connectionState.disconnected
+      if (response && response.statusCode === 401) {
+        this.close()
+        this._error(errorCode.unauthorized)
+      } else {
+        this._error(errorCode.connectError)
+      }
+    })
   }
 
   _reconnect(restart = false) {
-    if (this._end || this._reconnectTimer || this.connection.state === connectionState.reconnecting) return
-    if (this._websocket.connection) this._websocket.connection.close()
-    if (this._beatTimer) clearTimeout(this._beatTimer)
+    if (this._reconnectTimer || this.connection.state === connectionState.reconnecting) return
+    this._clearBeatTimer()
+    this._close()
     this._reconnectTimer = setTimeout(() => {
-      if (!this._end && this.connection.state !== connectionState.connected) {
-        ++this._reconnectCount
-        this.connection.state = connectionState.reconnecting
-        this.emit('reconnecting', this._reconnectCount)
-        restart ? this.start() : this._connect()
-        this._reconnectTimer = null
-      }
+      ++this._reconnectCount
+      this.connection.state = connectionState.reconnecting
+      this.emit('reconnecting', this._reconnectCount)
+      restart ? this.start() : this._connect()
+      this._reconnectTimer = null
     }, this.reconnectDelayTime || 5000)
+  }
+
+  _clearReconnectTimer() {
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer)
+      this._reconnectTimer = null
+    }
   }
 
   _beat() {
@@ -236,6 +207,13 @@ class signalrClient {
       this._beatTimer = setTimeout(() => {
         this._beat()
       }, this._beatInterval)
+    }
+  }
+
+  _clearBeatTimer() {
+    if (this._beatTimer) {
+      clearTimeout(this._beatTimer)
+      this._beatTimer = null
     }
   }
 
@@ -253,14 +231,8 @@ class signalrClient {
       })
       let startRequestOptions = url.parse(`${this.url}/start?${query}`, true)
       startRequestOptions.headers = this.headers
-      if (startRequestOptions.protocol === 'wss:') startRequestOptions.protocol = 'https:'
-      let timeoutTimer, req
-      timeoutTimer = setTimeout(() => {
-        req.abort()
-        reject({ code: errorCode.negotiateError, message: 'ETIMEDOUT' })
-      }, this.requestTimeout || 5000)
-      req = this.request.get(startRequestOptions, res => {
-        clearTimeout(timeoutTimer)
+      startRequestOptions.timeout = this.requestTimeout || 5000
+      let req = this.request.get(startRequestOptions, res => {
         let data = ''
         res.on('data', (chunk) => { data += chunk })
         res.on('end', () => {
@@ -275,9 +247,15 @@ class signalrClient {
         res.on('error', (e) => {
           return reject({ code: errorCode.startError, message: e })
         })
-      }).on('error', (e) => {
-        clearTimeout(timeoutTimer)
+      })
+      req.on('error', (e) => {
+        if (req.aborted) return
+        req = null
         return reject({ code: errorCode.startError, message: e })
+      })
+      req.on('timeout', () => {
+        req.abort()
+        reject({ code: errorCode.startError, message: 'ETIMEDOUT' })
       })
     })
   }
@@ -291,21 +269,15 @@ class signalrClient {
         connectionData: JSON.stringify(this._hubNames)
       })
       let abortRequestOptions = url.parse(`${this.url}/abort?${query}`, true)
-      abortRequestOptions = {
-        hostname: abortRequestOptions.hostname,
-        port: abortRequestOptions.port,
-        method: 'POST',
-        path: abortRequestOptions.path,
-        headers: this.headers,
-        protocol: abortRequestOptions.protocol === 'wss:' ? 'https:' : 'http:'
-      }
+      abortRequestOptions.method = 'POST'
+      abortRequestOptions.headers = this.headers
       let req = this.request.request(abortRequestOptions, res => {
         res.on('data', (chunk) => { })
         res.on('end', () => { return resolve() })
         res.on('error', (e) => { return reject({ code: errorCode.abortError, message: e }) })
-      }).on('error', (e) => {
-        return reject({ code: errorCode.abortError, message: e })
       })
+      req.on('error', (e) => { return reject({ code: errorCode.abortError, message: e }) })
+      req.write('')
       req.end()
     })
   }
@@ -320,14 +292,25 @@ class signalrClient {
     }
   }
 
+  _close() {
+    if (this._websocket) {
+      this._websocket.onclose = () => {}
+      this._websocket.onmessage = () => {}
+      this._websocket.onerror = () => {}
+      this._websocket.close()
+      this._websocket = undefined
+    }
+  }
+
   start() {
     if (!this._bound) {
       if (!this.url) {
         this._error(errorCode.invalidURL)
         return
       }
-      if (this.url.startsWith('http') || this.url.startsWith('wss')) {
-        this.request = this.url.startsWith('http') ? http : https
+      if (this.url.startsWith('http:') || this.url.startsWith('https:')) {
+        let _url = url.parse(this.url)
+        this.request = _url.protocol === 'https:' ? https : http
       } else {
         this._error(errorCode.invalidProtocol)
         return
@@ -342,10 +325,8 @@ class signalrClient {
         this._error(errorCode.noHub)
         return
       }
-      this._bind()
       this._bound = true
     }
-    this._end = false
     this._negotiate().then((negotiateProtocol) => {
       this.connection = {
         ...this.connection,
@@ -367,11 +348,16 @@ class signalrClient {
   }
 
   end() {
-    this._end = true
-    if (this._beatTimer) clearTimeout(this._beatTimer)
-    if (this._reconnectTimer) clearTimeout(this._reconnectTimer)
-    if (this._connectTimer) clearTimeout(this._connectTimer)
-    if (this._websocket.connection) this._websocket.connection.close()
+    if (this._websocket) {
+      this.emit('disconnected', 'end')
+      this._abort().catch((e) => {
+        console.log(e.code)
+        // this._error(e.code, e.message)
+      })
+    }
+    this._clearReconnectTimer()
+    this._clearBeatTimer()
+    this._close()
   }
 }
 
@@ -418,11 +404,11 @@ class hub {
   call(hubName, methodName) {
     return new Promise((resolve, reject) => {
       let messages = this._processInvocationArgs(arguments)
-      let invocationId = this.client._websocket.invocationId
+      let invocationId = this.client._invocationId
       let timeoutTimer = setTimeout(() => {
         delete this.callbacks[invocationId]
         return reject('Timeout')
-      }, this.client.callTimeout || 5000)
+      }, this.client._callTimeout || this.client.callTimeout || 5000)
       this.callbacks[invocationId] = (err, result) => {
         clearTimeout(timeoutTimer)
         delete this.callbacks[invocationId]
@@ -451,6 +437,7 @@ const errorCode = {
   negotiateError: 'Negotiate error',
   startError: 'Start error',
   connectError: 'Connect error',
+  socketError: 'Socket error',
   abortError: 'Abort error'
 }
 

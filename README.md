@@ -91,7 +91,7 @@ client.end()
 
 ## Powered By
 
-- [WebSocket-Node](https://github.com/theturtle32/WebSocket-Node)
+- [ws](https://github.com/websockets/ws)
 
 ## License
 
