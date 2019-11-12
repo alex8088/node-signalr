@@ -137,7 +137,6 @@ class signalrClient {
     })
     let ws = new websocketClient(`${url}/connect?${query}`, {
       handshakeTimeout: this.requestTimeout,
-      encoding: 'utf8',
       headers: this.headers
     })
     ws.onopen = (event) => {
