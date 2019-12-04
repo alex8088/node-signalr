@@ -142,9 +142,9 @@ class signalrClient {
     ws.onopen = (event) => {
       this._websocket = ws
       this._invocationId = 0
-      this._reconnectCount = 0
       this._callTimeout = 0
       this._start().then(() => {
+        this._reconnectCount = 0
         this.emit('connected')
         this.connection.state = connectionState.connected
         this._markLastMessage()
@@ -169,8 +169,9 @@ class signalrClient {
     ws.on('unexpected-response', (request, response) => {
       this.connection.state = connectionState.disconnected
       if (response && response.statusCode === 401) {
-        this.close()
         this._error(errorCode.unauthorized)
+        this._clearBeatTimer()
+        this._close()
       } else {
         this._error(errorCode.connectError)
       }
