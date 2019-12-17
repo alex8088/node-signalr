@@ -140,7 +140,6 @@ class signalrClient {
       headers: this.headers
     })
     ws.onopen = (event) => {
-      this._websocket = ws
       this._invocationId = 0
       this._callTimeout = 0
       this._start().then(() => {
@@ -172,10 +171,12 @@ class signalrClient {
         this._error(errorCode.unauthorized)
         this._clearBeatTimer()
         this._close()
+        this.emit('disconnected', 'unauthorized')
       } else {
         this._error(errorCode.connectError)
       }
     })
+    this._websocket = ws
   }
 
   _reconnect(restart = false) {
