@@ -10,20 +10,21 @@ const util = require('util')
 const events = require('events')
 
 /**
- * A signalR client for node.js which support ASP.net but not ASP.net Core. 
+ * A signalR client for node.js which support ASP.net but not ASP.net Core.
  * For ASP.net Core signalR support use the offical client from Microsoft.
  */
 class signalrClient {
   /**
-   * @param {String} url 
-   * @param {string[]} hubs 
+   * @param {String} url
+   * @param {string[]} hubs
    */
   constructor(url, hubs) {
     this.url = url
+    this.qs = {}
     this.headers = {}
     this.reconnectDelayTime = 5000
     this.requestTimeout = 5000
-    this.callTimeout = 5000  
+    this.callTimeout = 5000
     this.connection = {
       state: connectionState.disconnected,
       hub: new hub(this),
@@ -82,6 +83,7 @@ class signalrClient {
   _negotiate() {
     return new Promise((resolve, reject) => {
       let query = querystring.stringify({
+        ...this.qs,
         connectionData: JSON.stringify(this._hubNames),
         clientProtocol: 1.5
       })
@@ -129,6 +131,7 @@ class signalrClient {
   _connect() {
     let url = this.url.replace(/^http/, "ws")
     let query = querystring.stringify({
+      ...this.qs,
       clientProtocol: 1.5,
       transport: "webSockets",
       connectionToken: this.connection.token,
@@ -225,6 +228,7 @@ class signalrClient {
   _start() {
     return new Promise((resolve, reject) => {
       let query = querystring.stringify({
+        ...this.qs,
         clientProtocol: 1.5,
         transport: "webSockets",
         connectionToken: this.connection.token,
@@ -264,6 +268,7 @@ class signalrClient {
   _abort() {
     return new Promise((resolve, reject) => {
       let query = querystring.stringify({
+        ...this.qs,
         clientProtocol: 1.5,
         transport: "webSockets",
         connectionToken: this.connection.token,
@@ -378,7 +383,7 @@ class hub {
   }
 
   /**
-   * Binding events receive messages 
+   * Binding events receive messages
    */
   on(hubName, methodName, cb) {
     let handler = this.handlers[hubName.toLowerCase()]
