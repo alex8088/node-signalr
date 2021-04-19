@@ -1,5 +1,9 @@
 # node-signalr
 
+This repository is a fork of a library used to enable integration with the vendor Integra and are used by our [backend](https://github.com/Unloc/firebase-unloc). It was forked to avoid direct dependency on a small thrid-party dependency. More details about our integration can be found in [our documentation](https://github.com/Unloc/firebase-unloc). 
+
+
+## About
 A signalR client for node.js which support ASP.net but not ASP.net Core. For ASP.net Core signalR support use the offical client from Microsoft.
 
 ## Installation
