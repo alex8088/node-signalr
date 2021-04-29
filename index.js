@@ -22,6 +22,7 @@ class signalrClient {
     this.url = url
     this.qs = {}
     this.headers = {}
+    this.agent = false
     this.reconnectDelayTime = 5000
     this.requestTimeout = 5000
     this.callTimeout = 5000
@@ -90,6 +91,7 @@ class signalrClient {
       let negotiateRequestOptions = url.parse(`${this.url}/negotiate?${query}`, true)
       negotiateRequestOptions.headers = this.headers
       negotiateRequestOptions.timeout = this.requestTimeout || 5000
+      if (this.agent) negotiateRequestOptions.agent = this.agent
       let req = this.request.get(negotiateRequestOptions, (res) => {
         let data = ''
         res.on('data', (chunk) => {
@@ -100,26 +102,26 @@ class signalrClient {
             if (res.statusCode == 200) {
               let negotiateProtocol = JSON.parse(data)
               if (!negotiateProtocol.TryWebSockets) {
-                return reject({ code: errorCode.unsupportedWebsocket, message: null })
+                reject({ code: errorCode.unsupportedWebsocket, message: null })
               }
-              return resolve(negotiateProtocol)
+              resolve(negotiateProtocol)
             } else if (res.statusCode == 401 || res.statusCode == 302) {
-              return reject({ code: errorCode.unauthorized, message: null })
+              reject({ code: errorCode.unauthorized, message: null })
             } else {
-              return reject({ code: errorCode.negotiateError, message: res.statusCode })
+              reject({ code: errorCode.negotiateError, message: res.statusCode })
             }
           } catch (e) {
-            return reject({ code: errorCode.negotiateError, message: e })
+            reject({ code: errorCode.negotiateError, message: e })
           }
         })
         res.on('error', (e) => {
-          return reject({ code: errorCode.negotiateError, message: e })
+          reject({ code: errorCode.negotiateError, message: e })
         })
       })
       req.on('error', (e) => {
         if (req.aborted) return
         req = null
-        return reject({ code: errorCode.negotiateError, message: e })
+        reject({ code: errorCode.negotiateError, message: e })
       })
       req.on('timeout', () => {
         req.abort()
@@ -237,26 +239,27 @@ class signalrClient {
       let startRequestOptions = url.parse(`${this.url}/start?${query}`, true)
       startRequestOptions.headers = this.headers
       startRequestOptions.timeout = this.requestTimeout || 5000
+      if (this.agent) startRequestOptions.agent = this.agent
       let req = this.request.get(startRequestOptions, res => {
         let data = ''
         res.on('data', (chunk) => { data += chunk })
         res.on('end', () => {
           if (res.statusCode == 200) {
-            return resolve(data)
+            resolve(data)
           } else if (res.statusCode == 401 || res.statusCode == 302) {
-            return reject({ code: errorCode.unauthorized, message: null })
+            reject({ code: errorCode.unauthorized, message: null })
           } else {
-            return reject({ code: errorCode.startError, message: res.statusCode })
+            reject({ code: errorCode.startError, message: res.statusCode })
           }
         })
         res.on('error', (e) => {
-          return reject({ code: errorCode.startError, message: e })
+          reject({ code: errorCode.startError, message: e })
         })
       })
       req.on('error', (e) => {
         if (req.aborted) return
         req = null
-        return reject({ code: errorCode.startError, message: e })
+        reject({ code: errorCode.startError, message: e })
       })
       req.on('timeout', () => {
         req.abort()
@@ -277,12 +280,14 @@ class signalrClient {
       let abortRequestOptions = url.parse(`${this.url}/abort?${query}`, true)
       abortRequestOptions.method = 'POST'
       abortRequestOptions.headers = this.headers
+      abortRequestOptions.timeout = this.requestTimeout || 5000
+      if (this.agent) abortRequestOptions.agent = this.agent
       let req = this.request.request(abortRequestOptions, res => {
         res.on('data', (chunk) => { })
-        res.on('end', () => { return resolve() })
-        res.on('error', (e) => { return reject({ code: errorCode.abortError, message: e }) })
+        res.on('end', () => { resolve() })
+        res.on('error', (e) => { reject({ code: errorCode.abortError, message: e }) })
       })
-      req.on('error', (e) => { return reject({ code: errorCode.abortError, message: e }) })
+      req.on('error', (e) => { reject({ code: errorCode.abortError, message: e }) })
       req.write('')
       req.end()
     })
@@ -300,9 +305,9 @@ class signalrClient {
 
   _close() {
     if (this._websocket) {
-      this._websocket.onclose = () => {}
-      this._websocket.onmessage = () => {}
-      this._websocket.onerror = () => {}
+      this._websocket.onclose = () => { }
+      this._websocket.onmessage = () => { }
+      this._websocket.onerror = () => { }
       this._websocket.close()
       this._websocket = undefined
     }
@@ -413,7 +418,7 @@ class hub {
       let invocationId = this.client._invocationId
       let timeoutTimer = setTimeout(() => {
         delete this.callbacks[invocationId]
-        return reject('Timeout')
+        reject('Timeout')
       }, this.client._callTimeout || this.client.callTimeout || 5000)
       this.callbacks[invocationId] = (err, result) => {
         clearTimeout(timeoutTimer)
