@@ -1,6 +1,4 @@
 interface Client {
-    new(url: string, hubs: string[]): this
-
     url: string
     qs: Qs
     headers: Headers
@@ -23,12 +21,9 @@ interface Client {
 }
 
 type Hub = {
-    new(client: Client)
-
     call(hubName: string, methodName: string, ...args: string[])
     on(event: string, hubName: string, listener: (message: string) => void): Hub
     invoke(hubName: string, methodName: string, message: string)
-
 }
 
 declare enum ConnectionState {
@@ -65,7 +60,12 @@ interface Qs {
     [key: string]: string
 }
 
-export declare const client: Client
+export declare const Client: {
+    new(url: string, hubs: string[]): Client
+}
+export declare const Hub: {
+    new(client: Client): Hub
+}
 export declare const error: ErrorMessages
 export declare const connectionState: {
     connected: 1,
