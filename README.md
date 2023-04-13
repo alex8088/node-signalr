@@ -2,90 +2,97 @@
 
 A signalR client for node.js which support ASP.net but not ASP.net Core. For ASP.net Core signalR support use the offical client from Microsoft.
 
-## Installation
+## Install
 
 ```bash
-$ npm install node-signalr
+$ npm i node-signalr
 ```
 
 ## Usage
 
-### Create a instance of signalR client
+### Create a SignalR Client Instance
 
-```js
-const signalr = require('node-signalr')
+```ts
+import signalr from 'node-signalr'
 
-let client = new signalr.client('http://localhost:8080/signalr', ['testHub'])
+const client = new signalr.Client('http://localhost:8080/signalr', ['testHub'])
 ```
 
-### Configure client
+### Configuring Client
 
 ```js
 // custom headers
-client.headers['Token'] ='Tds2dsJk'
+client.headers['Token'] = 'Tds2dsJk'
 
-// set timeout for sending message 
+// set timeout for sending message
 client.callTimeout = 10000 // 10's, default 5000
 
 // set delay time for reconecting
 client.reconnectDelayTime = 2000 // 2's, default 5000
 
-// set timeout for connect 
+// set timeout for connect
 client.requestTimeout = 2000 // 2's, default 5000
 ```
 
-### Binding client events
+### Binding Client Events
 
-```js
+```ts
 client.on('connected', () => {
   console.log('SignalR client connected.')
 })
-client.on('reconnecting', (count) => {
-  console.log(`SignalR client reconnecting(${count}).`)
+client.on('reconnecting', (retryCount) => {
+  console.log(`SignalR client reconnecting(${retryCount}).`)
 })
-client.on('disconnected', (code) => {
-  console.log(`SignalR client disconnected(${code}).`)
+client.on('disconnected', (reason) => {
+  console.log(`SignalR client disconnected(${reason}).`)
 })
-client.on('error', (code, ex) => {
-  console.log(`SignalR client connect error: ${code}.`)
+client.on('error', (error) => {
+  console.log(`SignalR client connect error: ${error.code}.`)
 })
 ```
 
-### Binding hub method
+### Binding Hub Method
 
 - Bind callback for receive message
-  
+
 ```js
 client.connection.hub.on('testHub', 'getMessage', (message) => {
   console.log('receive:', message)
 })
 ```
 
-- Call the hub method and get return values asynchronously 
+- Call the hub method and get return values asynchronously
 
-```js
-client.connection.hub.call('testHub', 'send', message).then((result) => {
-  console.log('success:', result)
-}).catch((error) => {
-  console.log('error:', error)
-})
+```ts
+const message = { user: '', message: '' }
+
+client.connection.hub
+  .call('testHub', 'send', message)
+  .then((result) => {
+    console.log('success:', result)
+  })
+  .catch((error) => {
+    console.log('error:', error)
+  })
 ```
 
-- Invoke the hub method without return values 
+- Invoke the hub method without return values
 
-```js
+```ts
+const message = { user: '', message: '' }
+
 client.connection.hub.invoke('testHub', 'send', message)
 ```
 
-### Start client
+### Start Client
 
-```js
+```ts
 client.start()
 ```
 
-### End client
+### End Client
 
-```js
+```ts
 client.end()
 ```
 

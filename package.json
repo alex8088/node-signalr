@@ -1,19 +1,54 @@
 {
   "name": "node-signalr",
-  "version": "2.0.6",
+  "version": "3.0.0-alpha.0",
   "description": "A signalR client for node.js.",
-  "main": "index.js",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "author": "Alex Wei<https://github.com/alex8088>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alex8088/node-signalr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alex8088/node-signalr/issues"
+  },
+  "homepage": "https://github.com/alex8088/node-signalr#readme",
   "keywords": [
     "signalr",
     "websockets"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/alex8088/node-signalr.git"
+  "scripts": {
+    "format": "prettier --write .",
+    "lint": "eslint --ext .ts src/**",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run lint && unbuild"
   },
-  "author": "alex.wei",
-  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^16.18.23",
+    "@types/ws": "^8.5.4",
+    "@typescript-eslint/eslint-plugin": "^5.58.0",
+    "@typescript-eslint/parser": "^5.58.0",
+    "eslint": "^8.38.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "prettier": "^2.8.7",
+    "typescript": "^5.0.4",
+    "unbuild": "^1.2.1"
+  },
   "dependencies": {
-    "ws": "^7.2.0"
+    "@tiny-libs/typed-event-emitter": "^1.0.0",
+    "ws": "^8.13.0"
   }
 }
