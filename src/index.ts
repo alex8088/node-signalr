@@ -6,7 +6,7 @@ import querystring from 'node:querystring'
 import { TypedEventEmitter } from '@tiny-libs/typed-event-emitter'
 import WebSocket from 'ws'
 
-type ClientEvents = {
+export type ClientEvents = {
   connected: () => void
   reconnecting: (retryCount: number) => void
   disconnected: (reason: 'failed' | 'unauthorized' | 'end') => void
@@ -83,7 +83,7 @@ type SignalRMessage = {
  * Create an Error for the signalR client with the specified error code and
  * message.
  */
-class SignalRError extends Error {
+export class SignalRError extends Error {
   code: ErrorCode
 
   constructor(code: ErrorCode, message: string) {
