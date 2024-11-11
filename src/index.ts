@@ -499,7 +499,9 @@ export class Client extends TypedEventEmitter<ClientEvents> {
       this.websocket.onclose = null
       this.websocket.onmessage = null
       this.websocket.onerror = null
-      this.websocket.close()
+      if (this.websocket.readyState === this.websocket.OPEN) {
+        this.websocket.close()
+      }
       this.websocket = undefined
     }
   }
