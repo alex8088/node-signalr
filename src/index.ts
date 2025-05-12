@@ -494,13 +494,13 @@ export class Client extends TypedEventEmitter<ClientEvents> {
     }
   }
 
-  private _close(): void {
+  private _close(force?: boolean): void {
     if (this.websocket) {
       this.websocket.onclose = null
       this.websocket.onmessage = null
       this.websocket.onerror = null
       if (this.websocket.readyState === this.websocket.OPEN) {
-        this.websocket.close()
+        force ? this.websocket.terminate() : this.websocket.close()
       }
       this.websocket = undefined
     }
@@ -549,14 +549,14 @@ export class Client extends TypedEventEmitter<ClientEvents> {
       })
   }
 
-  end(): void {
+  end(force?: boolean): void {
     if (this.websocket) {
       this.emit('disconnected', 'end')
       this._abort().catch(() => {})
     }
     this._clearReconnectTimer()
     this._clearBeatTimer()
-    this._close()
+    this._close(force)
   }
 }
 
